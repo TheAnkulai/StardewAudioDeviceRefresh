@@ -1,8 +1,0 @@
-C:\Users\TheAnkulai\source\repos\StardewAudioRefresh\StardewAudioRefresh\bin\Debug\net6.0\StardewAudioDeviceRefresh.deps.json
-C:\Users\TheAnkulai\source\repos\StardewAudioRefresh\StardewAudioRefresh\bin\Debug\net6.0\StardewAudioDeviceRefresh.dll
-C:\Users\TheAnkulai\source\repos\StardewAudioRefresh\StardewAudioRefresh\obj\Debug\net6.0\StardewAudioDeviceRefresh.csproj.AssemblyReference.cache
-C:\Users\TheAnkulai\source\repos\StardewAudioRefresh\StardewAudioRefresh\obj\Debug\net6.0\StardewAudioDeviceRefresh.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\TheAnkulai\source\repos\StardewAudioRefresh\StardewAudioRefresh\obj\Debug\net6.0\StardewAudioDeviceRefresh.AssemblyInfoInputs.cache
-C:\Users\TheAnkulai\source\repos\StardewAudioRefresh\StardewAudioRefresh\obj\Debug\net6.0\StardewAudioDeviceRefresh.AssemblyInfo.cs
-C:\Users\TheAnkulai\source\repos\StardewAudioRefresh\StardewAudioRefresh\obj\Debug\net6.0\StardewAudioDeviceRefresh.csproj.CoreCompileInputs.cache
-C:\Users\TheAnkulai\source\repos\StardewAudioRefresh\StardewAudioRefresh\obj\Debug\net6.0\StardewAudioDeviceRefresh.dll
