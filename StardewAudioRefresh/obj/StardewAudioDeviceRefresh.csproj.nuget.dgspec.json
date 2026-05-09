@@ -46,10 +46,14 @@
         "net6.0": {
           "targetAlias": "net6.0",
           "dependencies": {
+            "NAudio.Wasapi": {
+              "target": "Package",
+              "version": "[2.2.1, )"
+            },
             "Pathoschild.Stardew.ModBuildConfig": {
               "suppressParent": "All",
               "target": "Package",
-              "version": "[4.4.0, )"
+              "version": "[4.*, )"
             }
           },
           "imports": [

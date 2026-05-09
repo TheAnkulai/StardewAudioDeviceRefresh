@@ -1,7 +1,7 @@
 {
   "Name": "Stardew Audio Device Refresh",
   "Author": "TheAnkulai",
-  "Version": "0.1.0",
+  "Version": "0.2.0",
   "Description": "Adds a hotkey to reopen Stardew Valley's OpenAL audio device after changing the Windows output device.",
   "UniqueID": "TheAnkulai.StardewAudioDeviceRefresh",
   "EntryDll": "StardewAudioDeviceRefresh.dll",

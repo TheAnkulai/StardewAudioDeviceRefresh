@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.Xna.Framework.Audio;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
+using NAudio.CoreAudioApi;
 using StardewValley;
 
 namespace StardewAudioDeviceRefresh;
@@ -20,6 +21,14 @@ public sealed class ModEntry : Mod
     private ModConfig Config = null!;
     private int PendingTestSoundTicks = 0;
 
+    private MMDeviceEnumerator? DeviceEnumerator;
+    private AudioDeviceNotificationClient? DeviceNotificationClient;
+
+    private int PendingAutoRefreshTicks = 0;
+    private string? LastKnownDefaultDeviceId;
+
+    private bool IsGenericModConfigMenuRegistered = false;
+
     public override void Entry(IModHelper helper)
     {
         this.Config = helper.ReadConfig<ModConfig>();
@@ -27,6 +36,9 @@ public sealed class ModEntry : Mod
         helper.Events.Input.ButtonPressed += this.OnButtonPressed;
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.GameLoop.GameLaunched += this.OnGameLaunched;
+
+        //helper.Events.GameLoop.ReturnedToTitle += this.OnReturnedToTitle;
+        //helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
 
         this.Monitor.Log(
             $"Stardew Audio Device Refresh loaded. Press {this.Config.RefreshAudioKey} to refresh audio, {this.Config.TestSoundKey} to test sound.",
@@ -37,10 +49,96 @@ public sealed class ModEntry : Mod
     private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)
     {
         this.RegisterGenericModConfigMenu();
+        this.TryStartAudioDeviceWatcher();
+    }
+
+    private void TryStartAudioDeviceWatcher()
+    {
+        try
+        {
+            if (!this.Config.AutoRefreshOnDefaultDeviceChange)
+            {
+                this.Monitor.Log("Auto audio device refresh is disabled.", LogLevel.Trace);
+                return;
+            }
+
+            this.DeviceEnumerator ??= new MMDeviceEnumerator();
+
+            this.LastKnownDefaultDeviceId = this.GetDefaultAudioDeviceId();
+
+            this.DeviceNotificationClient = new AudioDeviceNotificationClient(
+                monitor: this.Monitor,
+                onDefaultDeviceChanged: this.OnDefaultAudioDeviceChanged
+            );
+
+            this.DeviceEnumerator.RegisterEndpointNotificationCallback(this.DeviceNotificationClient);
+
+            this.Monitor.Log(
+                $"Auto audio device refresh enabled. Current default device id: {this.LastKnownDefaultDeviceId ?? "unknown"}",
+                LogLevel.Info
+            );
+        }
+        catch (Exception ex)
+        {
+            this.Monitor.Log($"Failed to start audio device watcher: {ex}", LogLevel.Warn);
+        }
+    }
+
+    private string? GetDefaultAudioDeviceId()
+    {
+        try
+        {
+            this.DeviceEnumerator ??= new MMDeviceEnumerator();
+
+            MMDevice device = this.DeviceEnumerator.GetDefaultAudioEndpoint(
+                DataFlow.Render,
+                Role.Multimedia
+            );
+
+            return device.ID;
+        }
+        catch (Exception ex)
+        {
+            this.Monitor.Log($"Could not get default audio device id: {ex.Message}", LogLevel.Trace);
+            return null;
+        }
+    }
+
+    private void OnDefaultAudioDeviceChanged(string? newDeviceId)
+    {
+        if (!this.Config.AutoRefreshOnDefaultDeviceChange)
+            return;
+
+        if (string.IsNullOrWhiteSpace(newDeviceId))
+        {
+            this.Monitor.Log("Default audio device changed, but new device id is empty.", LogLevel.Trace);
+            return;
+        }
+
+        if (newDeviceId == this.LastKnownDefaultDeviceId)
+        {
+            this.Monitor.Log("Default audio device change ignored: device id did not change.", LogLevel.Trace);
+            return;
+        }
+
+        this.LastKnownDefaultDeviceId = newDeviceId;
+
+        this.PendingAutoRefreshTicks = Math.Max(1, this.Config.AutoRefreshDelayTicks);
+
+        this.Monitor.Log(
+            $"Default audio device changed. Auto refresh scheduled in {this.PendingAutoRefreshTicks} ticks.",
+            LogLevel.Info
+        );
     }
 
     private void RegisterGenericModConfigMenu()
     {
+        if (this.IsGenericModConfigMenuRegistered)
+        {
+            this.Monitor.Log("Generic Mod Config Menu is already registered; skipping duplicate registration.", LogLevel.Trace);
+            return;
+        }
+
         IGenericModConfigMenuApi? configMenu =
             this.Helper.ModRegistry.GetApi<IGenericModConfigMenuApi>("spacechase0.GenericModConfigMenu");
 
@@ -141,10 +239,71 @@ public sealed class ModEntry : Mod
             mod: this.ModManifest,
             text: () => "Recommended use: switch your Windows output device, then press the refresh key. Avoid using old hard reset methods; this mod uses OpenAL Soft device reopen instead."
         );
+
+        configMenu.AddSectionTitle(
+            mod: this.ModManifest,
+            text: () => "Automatic refresh"
+        );
+
+        configMenu.AddBoolOption(
+            mod: this.ModManifest,
+            getValue: () => this.Config.AutoRefreshOnDefaultDeviceChange,
+            setValue: value =>
+            {
+                this.Config.AutoRefreshOnDefaultDeviceChange = value;
+
+                if (value)
+                    this.TryStartAudioDeviceWatcher();
+            },
+            name: () => "Auto-refresh when Windows output device changes",
+            tooltip: () => "Experimental. Automatically reopens Stardew Valley's OpenAL audio device when Windows changes the default output device.",
+            fieldId: "autoRefreshOnDefaultDeviceChange"
+        );
+
+        configMenu.AddNumberOption(
+            mod: this.ModManifest,
+            getValue: () => this.Config.AutoRefreshDelayTicks,
+            setValue: value => this.Config.AutoRefreshDelayTicks = value,
+            name: () => "Auto-refresh delay",
+            tooltip: () => "Delay before automatic refresh, in game ticks. 60 ticks is about one second.",
+            min: 1,
+            max: 300,
+            interval: 1,
+            fieldId: "autoRefreshDelayTicks"
+        );
+
+        configMenu.AddBoolOption(
+            mod: this.ModManifest,
+            getValue: () => this.Config.PlayTestSoundAfterAutoRefresh,
+            setValue: value => this.Config.PlayTestSoundAfterAutoRefresh = value,
+            name: () => "Play test sound after automatic refresh",
+            tooltip: () => "Useful for debugging, but can be annoying during normal play.",
+            fieldId: "playTestSoundAfterAutoRefresh"
+        );
     }
 
     private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
     {
+        if (this.PendingAutoRefreshTicks > 0)
+        {
+            this.PendingAutoRefreshTicks--;
+
+            if (this.PendingAutoRefreshTicks == 0)
+            {
+                this.Monitor.Log("Running automatic audio device refresh.", LogLevel.Info);
+
+                bool reopened = this.TryReopenOpenALDevice();
+
+                this.Monitor.Log($"Automatic OpenAL reopen finished. reopened={reopened}", LogLevel.Info);
+
+                if (this.Config.PlayTestSoundAfterAutoRefresh)
+                {
+                    this.PendingTestSoundTicks = Math.Max(1, this.Config.DelayedTestSoundTicks);
+                    this.Monitor.Log("Delayed test sound scheduled after automatic refresh.", LogLevel.Info);
+                }
+            }
+        }
+
         if (this.PendingTestSoundTicks <= 0)
             return;
 
@@ -152,7 +311,7 @@ public sealed class ModEntry : Mod
 
         if (this.PendingTestSoundTicks == 0)
         {
-            this.Monitor.Log("Playing delayed test sound after audio reset.", LogLevel.Info);
+            this.Monitor.Log("Playing delayed test sound after audio refresh.", LogLevel.Info);
             this.PlayTestSound();
         }
     }
