@@ -15,4 +15,8 @@ public sealed class ModConfig
 
     public int DelayedTestSoundTicks { get; set; } = 30;
     public float TemporaryVolume { get; set; } = 0.0f;
+
+    public bool AutoRefreshOnDefaultDeviceChange { get; set; } = false;
+    public int AutoRefreshDelayTicks { get; set; } = 60;
+    public bool PlayTestSoundAfterAutoRefresh { get; set; } = false;
 }
